@@ -69,15 +69,15 @@ torch.backends.cudnn.enabled = True # make sure to use cudnn for computational p
 
 print('Creating dataloaders...')
 
-train_folder = args.dataset_path+args.dataset_type+"/training/frames/"
-test_folder = args.dataset_path+args.dataset_type+"/testing/frames/"
+train_dir = os.path.join(args.dataset_path, args.dataset_type, "training", "frames/")
+test_dir = os.path.join(args.dataset_path, args.dataset_type, "testing", "frames/")
 
 # Loading dataset
-train_dataset = DataLoader(train_folder, transforms.Compose([
+train_dataset = DataLoader(train_dir, transforms.Compose([
              transforms.ToTensor(),          
              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
-test_dataset = DataLoader(test_folder, transforms.Compose([
+test_dataset = DataLoader(test_dir, transforms.Compose([
              transforms.ToTensor(),            
              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
@@ -149,6 +149,3 @@ torch.save(m_items, os.path.join(log_dir, 'keys.pt'))
     
 # sys.stdout = orig_stdout
 # f.close()
-
-
-

@@ -19,12 +19,16 @@ import math
 from collections import OrderedDict
 import copy
 import time
+import datetime 
 from model.utils import DataLoader
 from model.final_future_prediction_with_memory_spatial_sumonly_weight_ranking_top1 import *
 import sklearn.metrics as metrics
 from utils import *
 import random
 import glob
+
+import shutil
+import distutils.dir_util import copy_tree
 
 import argparse
 
@@ -46,8 +50,14 @@ parser.add_argument('--num_workers', type=int, default=2, help='number of worker
 parser.add_argument('--num_workers_test', type=int, default=1, help='number of workers for the test loader')
 parser.add_argument('--dataset_type', type=str, default='ped2', help='type of dataset: ped2, avenue, shanghai')
 parser.add_argument('--dataset_path', type=str, default='./dataset/', help='directory of data')
-parser.add_argument('--model_dir', type=str, help='directory of model')
-parser.add_argument('--m_items_dir', type=str, help='directory of model')
+parser.add_argument('--model_dir', default="./exp", type=str, help='directory of model')
+#parser.add_argument('--m_items_dir', default="./exp", type=str, help='directory of model')
+
+
+# ceate the output directory
+date_time_str = str(datetime.datetime.today())
+output_dir = os.path.join("figures", date_time_str)
+os.makedirs(output_dir, exist_ok=True)
 
 args = parser.parse_args()
 
@@ -65,10 +75,11 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-test_folder = args.dataset_path+args.dataset_type+"/testing/frames"
+test_dir = os.path.join(args.dataset_path, args.dataset_type, "testing", "frames")
+model_dir = os.path.join(args.model_dir, args.dataset_type, "log")
 
 # Loading dataset
-test_dataset = DataLoader(test_folder, transforms.Compose([
+test_dataset = DataLoader(test_dir, transforms.Compose([
              transforms.ToTensor(),            
              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
@@ -80,9 +91,9 @@ test_batch = data.DataLoader(test_dataset, batch_size = args.test_batch_size,
 loss_func_mse = nn.MSELoss(reduction='none')
 
 # Loading the trained model
-model = torch.load(args.model_dir)
+model = torch.load(os.path.join(model_dir, "model.pth"))
 model.cuda()
-m_items = torch.load(args.m_items_dir)
+m_items = torch.load(os.path.join(model_dir, "keys.pt"))
 
 
 labels = np.load('./data/frame_labels_'+args.dataset_type+'.npy')
@@ -90,7 +101,7 @@ if args.dataset_type == 'shanghai':
     labels = np.expand_dims(labels, 0)
 
 videos = OrderedDict()
-videos_list = sorted(glob.glob(os.path.join(test_folder, '*')))
+videos_list = sorted(glob.glob(os.path.join(test_dir, '*')))
 for video in videos_list:
     video_name = video.split('/')[-1]
     videos[video_name] = {}
@@ -153,7 +164,7 @@ for k,(imgs) in enumerate(test_batch):
             plt.cla()
             plt.title('Error Image ' + str(k), fontsize=18)
             plt.imshow(np.moveaxis(outputs_diff, 0, 2), vmin=0, vmax=255)
-            plt.savefig('outputs_diff/' + str(k) + '_normal.png')
+            plt.savefig(os.path.join(output_dir, str(k) + '_normal.png'))
 
         elif labels_list[k] == 1:  # normal
 
@@ -161,7 +172,7 @@ for k,(imgs) in enumerate(test_batch):
             plt.cla()
             plt.title('Error Image ' + str(k), fontsize=18)
             plt.imshow(np.moveaxis(outputs_diff, 0, 2), vmin=0, vmax=255)
-            plt.savefig('outputs_diff/' + str(k) + '_anomaly.png')
+            plt.savefig(os.path.join(output_dir, str(k) + '_anomaly.png'))
 
         print('Frame=' + str(k) + ', Anomaly=' + str(labels_list[k]))    
 
@@ -214,7 +225,7 @@ plt.ylabel('True Positive Rate', fontsize=14)
 plt.plot(fpr, tpr)
 #plt.scatter(fpr[best_idx], tpr[best_idx])
 plt.pause(0.01)
-plt.savefig('roc_curve.png')
+plt.savefig(os.path.join(output_dir, 'roc_curve.png'))
 
 # Plot PRC.
 plt.cla()
@@ -225,7 +236,7 @@ plt.plot(r, p, label='PRC')
 plt.scatter(r[best_idx], p[best_idx], color='r', label='Best F1 Score')
 plt.pause(0.01)
 plt.legend()
-plt.savefig('prc.png')
+plt.savefig(os.path.join(output_dir, 'prc.png'))
 
 # Plot anomaly curve.
 change_points = np.where(np.diff(1 - labels_list) != 0)[0]
@@ -246,7 +257,7 @@ plt.axvspan(xmin=b3, xmax=b4, color='g', alpha=0.1)
 #plt.axvspan(xmin=b4, xmax=b5, color='r', alpha=0.1)
 plt.pause(0.01)
 plt.legend()
-plt.savefig('anomaly_curve_all.png', bbox_inches='tight')
+plt.savefig(os.path.join(output_dir, 'anomaly_curve_all.png'), bbox_inches='tight')
 
 # Plot anomaly curve.
 plt.figure(figsize=(15,5)) 
@@ -271,7 +282,7 @@ plt.axvspan(xmin=change_points[8]+1, xmax=change_points[9], color='r', alpha=0.1
 plt.axvspan(xmin=change_points[9]+1, xmax=change_points[10], color='g', alpha=0.1)
 plt.pause(0.01)
 plt.legend()
-plt.savefig('anomaly_curve_all.png', bbox_inches='tight')
+plt.savefig(os.path.join(output_dir, 'anomaly_curve_all.png'), bbox_inches='tight')
 
 # Plot truth curve.
 change_points = np.where(np.diff(1 - labels_list) != 0)[0]
@@ -285,8 +296,13 @@ plt.plot(1 - labels_list[b1:b2], label='Truth')
 #plt.axhline(best_threshold, color='red', linestyle='--', label='Best Threshold')
 plt.pause(0.01)
 plt.legend()
-plt.savefig('truth_curve.png')
+plt.savefig(os.path.join(output_dir, 'truth_curve.png'))
+
+# copy all contents to the 'latest' folder
+shutil.rmtree("figures/latest")
+copy_tree(output_dir, "figures/latest")
 
 # Plot quantitative results.
 print('The result of ', args.dataset_type)
 print('AUC: ', accuracy*100, '%')
+

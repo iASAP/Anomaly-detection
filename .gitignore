@@ -1,2 +1,5 @@
 exp/*
 __pycache__/*
+**/__pycach__/*
+figures/*
+*.pyc
