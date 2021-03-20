@@ -73,12 +73,12 @@ def score_sum(list1, list2, alpha):
         
     return list_result
 
-def sliding_window(image, stepSize, windowSize):
+def sliding_window(image, step_size, win_size):
     """
 
     """
     # slide a window across the image
-    for y in range(0, image.shape[0], stepSize):
-        for x in range(0, image.shape[1], stepSize):
+    for y in range(0, image.shape[0]-win_size[1], step_size[1]):
+        for x in range(0, image.shape[1]-win_size[0], step_size[0]):
             # yield the current window
-            yield (x, y, image[y:y + windowSize[1], x:x + windowSize[0]])
+            yield (x, y, image[y:y + win_size[1], x:x + win_size[0]])

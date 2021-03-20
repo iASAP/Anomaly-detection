@@ -19,7 +19,7 @@ import math
 from collections import OrderedDict
 import copy
 import time
-from data import DataLoader
+from data import DataLoader, ChipDataLoader
 from model import *
 #from model.final_future_prediction_with_memory_spatial_sumonly_weight_ranking_top1 import *
 from sklearn.metrics import roc_auc_score
@@ -76,13 +76,15 @@ if __name__ == "__main__":
     test_dir = os.path.join(args.dataset_path, args.dataset_type, "testing", "frames/")
 
     # Loading dataset
-    train_dataset = DataLoader(train_dir, transforms.Compose([
-                 transforms.ToTensor(),          
-                 ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
+    # train_dataset = DataLoader(train_dir, transforms.Compose([
+    #              transforms.ToTensor(),          
+    #              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
+    train_dataset = ChipDataLoader(train_dir, transforms.Compose([transforms.ToTensor(),]), 256, 20, 10, time_step=args.t_length-1, color=args.color)
 
-    test_dataset = DataLoader(test_dir, transforms.Compose([
-                 transforms.ToTensor(),            
-                 ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
+    # test_dataset = DataLoader(test_dir, transforms.Compose([
+    #              transforms.ToTensor(),            
+    #              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
+    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), 256, 20, 10, time_step=args.t_length-1, color=args.color)
 
     train_size = len(train_dataset)
     test_size = len(test_dataset)
@@ -126,8 +128,8 @@ if __name__ == "__main__":
         
         start = time.time()
         for j,imgs in enumerate(train_batch):
-            
             imgs = Variable(imgs).cuda()
+#            if j==0: print(f"{np.shape(imgs)}")
             
             outputs, _, _, m_items, softmax_score_query, softmax_score_memory, separateness_loss, compactness_loss = model.forward(imgs[:,0:indx_of_inflection], m_items, True)
             

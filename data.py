@@ -37,8 +37,7 @@ class DataLoader(data.Dataset):
         self.setup()
         self.samples = self.get_all_samples()
         self.color = color
-        
-        
+
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, '*'))
         for video in sorted(videos):
@@ -48,8 +47,7 @@ class DataLoader(data.Dataset):
             self.videos[video_name]['frame'] = glob.glob(os.path.join(video, '*.tif'))
             self.videos[video_name]['frame'].sort()
             self.videos[video_name]['length'] = len(self.videos[video_name]['frame'])
-            
-            
+
     def get_all_samples(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, '*'))
@@ -57,10 +55,8 @@ class DataLoader(data.Dataset):
             video_name = video.split('/')[-1]
             for i in range(len(self.videos[video_name]['frame'])-self._time_step):
                 frames.append(self.videos[video_name]['frame'][i])
-                           
-        return frames               
-            
-        
+        return frames
+
     def __getitem__(self, index):
         video_name = self.samples[index].split('/')[-2]
         frame_name = int(self.samples[index].split('/')[-1].split('.')[-2])
@@ -76,3 +72,69 @@ class DataLoader(data.Dataset):
         
     def __len__(self):
         return len(self.samples)
+
+
+
+class ChipDataLoader(data.Dataset):
+    def __init__(self, video_folder, transform, img_size, win_size, step_size, time_step=4, num_pred=1, color=True):
+        self.dir = video_folder
+        self.transform = transform
+        self.videos = OrderedDict()
+        self._time_step = time_step
+        self._num_pred = num_pred
+        self.setup()
+        self.samples = self.get_all_samples()
+        self.color = color
+
+        # set as an (x,y) tuple. Assume x==y if only an integer is provided
+        self.img_size = (img_size, img_size) if type(img_size)==int else img_size
+        self.win_size = (win_size, win_size) if type(win_size)==int else win_size
+        self.step_size = (step_size, step_size) if type(step_size)==int else step_size
+
+        # 
+        self.num_x_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
+        self.num_y_steps = len(range(0, self.img_size[1]-self.win_size[1], self.step_size[1]))
+
+        
+    def setup(self):
+        videos = glob.glob(os.path.join(self.dir, '*'))
+        for video in sorted(videos):
+            video_name = video.split('/')[-1]
+            self.videos[video_name] = {}
+            self.videos[video_name]['path'] = video
+            self.videos[video_name]['frame'] = glob.glob(os.path.join(video, '*.tif'))
+            self.videos[video_name]['frame'].sort()
+            self.videos[video_name]['length'] = len(self.videos[video_name]['frame'])
+
+    def get_all_samples(self):
+        frames = []
+        videos = glob.glob(os.path.join(self.dir, '*'))
+        for video in sorted(videos):
+            video_name = video.split('/')[-1]
+            for i in range(len(self.videos[video_name]['frame'])-self._time_step):
+                frames.append(self.videos[video_name]['frame'][i])
+
+        return frames
+
+    def __getitem__(self, index):
+        frame_indx = index//(self.num_x_steps*self.num_y_steps)
+        x_step = (index % (self.num_x_steps*self.num_y_steps) ) // self.num_x_steps
+        y_step = (index % (self.num_x_steps*self.num_y_steps) ) % self.num_x_steps
+        x = x_step*self.step_size[0]
+        y = y_step*self.step_size[1]
+
+        video_name = self.samples[frame_indx].split('/')[-2]
+        frame_name = int(self.samples[frame_indx].split('/')[-1].split('.')[-2])
+
+        batch = []
+        for i in range(self._time_step+self._num_pred):
+            image = np_load_frame(self.videos[video_name]['frame'][frame_name+i-1], self.img_size[1], self.img_size[0], color=self.color)
+
+
+            if self.transform is not None:
+                batch.append(self.transform(image)[:,y:y+self.win_size[1], x:x+self.win_size[0]])
+
+        return np.concatenate(batch, axis=0)
+
+    def __len__(self):
+        return len(self.samples)*self.num_x_steps*self.num_y_steps
