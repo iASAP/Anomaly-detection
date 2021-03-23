@@ -73,6 +73,17 @@ def score_sum(list1, list2, alpha):
         
     return list_result
 
+def is_power_of_2(n):
+    return (n & (n-1) == 0) and n != 0
+
+def nearest_power_of_2(target):
+    if target > 1:
+        for i in range(1, int(target)):
+            if (2 ** i >= target):
+                return 2 ** i
+    else:
+        return 1
+
 def sliding_window(image, step_size, win_size):
     """
 

@@ -84,9 +84,10 @@ if __name__ == "__main__":
     model_dir = os.path.join(args.model_dir, args.dataset_type, "log")
 
     # Loading dataset
-    test_dataset = DataLoader(test_dir, transforms.Compose([
-                 transforms.ToTensor(),            
-                 ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
+    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), 256, 20, 10, time_step=args.t_length-1, color=args.color)
+    #test_dataset = DataLoader(test_dir, transforms.Compose([
+    #             transforms.ToTensor(),            
+    #             ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
 
     test_size = len(test_dataset)
 
@@ -137,7 +138,7 @@ if __name__ == "__main__":
 
     model.eval()
 
-    for k,(imgs) in enumerate(test_batch):
+    for k,imgs in enumerate(test_batch):
 
         if k == label_length-4*(video_num+1):
             video_num += 1
@@ -171,15 +172,15 @@ if __name__ == "__main__":
                 plt.imshow(np.moveaxis(outputs_diff, 0, 2), vmin=0, vmax=255)
                 plt.savefig(os.path.join(output_dir, str(k) + '_normal.png'))
 
-            elif labels_list[k] == 1:  # normal
+            #elif labels_list[k] == 1:  # normal
 
                 # Plot diff outputs.
-                plt.cla()
-                plt.title('Error Image ' + str(k), fontsize=18)
-                plt.imshow(np.moveaxis(outputs_diff, 0, 2), vmin=0, vmax=255)
-                plt.savefig(os.path.join(output_dir, str(k) + '_anomaly.png'))
+                #plt.cla()
+                #plt.title('Error Image ' + str(k), fontsize=18)
+                #plt.imshow(np.moveaxis(outputs_diff, 0, 2), vmin=0, vmax=255)
+                #plt.savefig(os.path.join(output_dir, str(k) + '_anomaly.png'))
 
-            print('Frame=' + str(k) + ', Anomaly=' + str(labels_list[k]))    
+            print(f'Frame={k}, Anomaly={labels_list[k]}')
 
         # Save normal data for next loop.
         imgs_prev = imgs

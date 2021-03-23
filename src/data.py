@@ -4,6 +4,7 @@ import os
 import glob
 import cv2
 import torch.utils.data as data
+from utils import is_power_of_2, nearest_power_of_2
 
 
 rng = np.random.RandomState(2020)
@@ -91,11 +92,35 @@ class ChipDataLoader(data.Dataset):
         self.win_size = (win_size, win_size) if type(win_size)==int else win_size
         self.step_size = (step_size, step_size) if type(step_size)==int else step_size
 
-        # 
-        self.num_x_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
-        self.num_y_steps = len(range(0, self.img_size[1]-self.win_size[1], self.step_size[1]))
+        # ensure that image size is power of 2
+        if not is_power_of_2(self.img_size[0]) or not is_power_of_2(self.img_size[1]):
+            raise f"Image dimensions must be a power of 2. current={self.img_size}"
 
+        # verify that the win_size is a power of 2 in both dimensions and correct if it isn't
+        if not is_power_of_2(self.win_size[0]):
+            np2 = nearest_power_of_2(self.win_size[0])
+            print(f"win_size_x {self.win_size[0]} is not a power of 2. modifying to {np2}")
+            self.win_size = (np2, self.win_size[1])
+
+        if not is_power_of_2(self.win_size[1]):
+            np2 = nearest_power_of_2(self.win_size[1])
+            print(f"win_size_y {self.win_size[1]} is not a power of 2. modifying to {np2}")
+            self.win_size = (self.win_size[0], np2)
         
+        # if the window size is greater than or equal to img_size, make equal to img_size
+        if self.win_size[0] >= self.img_size[0]:
+            self.win_size = (self.img_size[0], self.win_size[1])
+            self.num_x_steps = 1
+        else:
+            self.num_x_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
+
+        if self.win_size[1] >= self.img_size[1]:
+            self.win_size = (self.win_size[0], self.img_size[1])
+            self.num_y_steps = 1
+        else:
+            self.num_y_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
+
+
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, '*'))
         for video in sorted(videos):
@@ -115,6 +140,12 @@ class ChipDataLoader(data.Dataset):
                 frames.append(self.videos[video_name]['frame'][i])
 
         return frames
+
+    def get_frame(self, index):
+        frame_indx = index//(self.num_x_steps*self.num_y_steps)
+        video_name = self.samples[frame_indx].split('/')[-2]
+        frame_name = int(self.samples[frame_indx].split('/')[-1].split('.')[-2])
+        return np_load_frame(self.videos[video_name]['frame'][frame_name+i-1], self.img_size[1], self.img_size[0], color=self.color)
 
     def __getitem__(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
