@@ -13,25 +13,25 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 import torchvision.utils as v_utils
-import matplotlib.pyplot as plt
 import cv2
 import math
 from collections import OrderedDict
 import copy
 import time
-from data import DataLoader, ChipDataLoader
+from data import ChipDataLoader
 from model import *
 #from model.final_future_prediction_with_memory_spatial_sumonly_weight_ranking_top1 import *
 from sklearn.metrics import roc_auc_score
 from utils import *
 import random
+from tqdm import tqdm
 
 import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MNAD")
     parser.add_argument('--epochs', type=int, default=60, help='number of epochs for training')
-    parser.add_argument('--config', type=str, default='config.json', help='directory of log')
+    parser.add_argument('--config', type=str, default='./train_config.json', help='directory of log')
     args = parser.parse_args()
 
     with open(args.config) as config_file:
@@ -53,23 +53,15 @@ if __name__ == "__main__":
     # train_dataset = DataLoader(train_dir, transforms.Compose([
     #              transforms.ToTensor(),          
     #              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
-    img_size = (config["image"]["size_x"], config["image"]["size_y"])
+    img_size = (config["image"]["size_x"], config["image"]["size_y"]) 
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
     train_dataset = ChipDataLoader(train_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
 
-    # test_dataset = DataLoader(test_dir, transforms.Compose([
-    #              transforms.ToTensor(),            
-    #              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, color=args.color)
-    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
-
     train_size = len(train_dataset)
-    test_size = len(test_dataset)
 
     train_batch = data.DataLoader(train_dataset, batch_size = config['batch_size'], 
                                   shuffle=True, num_workers=config['num_workers'], drop_last=True)
-    test_batch = data.DataLoader(test_dataset, batch_size = config['test_batch_size'], 
-                                 shuffle=False, num_workers=config['num_workers_test'], drop_last=False)
 
     n_channel = 3 if config['image']['color'] else 1
     indx_of_inflection = (config['t_length']-1) * n_channel
@@ -86,12 +78,6 @@ if __name__ == "__main__":
 
 
     # Report the training process
-    log_dir = os.path.join('./exp', config['dataset_type'], config['exp_dir'])
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    # orig_stdout = sys.stdout
-    # f = open(os.path.join(log_dir, 'log.txt'),'w')
-    # sys.stdout= f
 
     loss_func_mse = nn.MSELoss(reduction='none')
 
@@ -99,7 +85,7 @@ if __name__ == "__main__":
 
     m_items = F.normalize(torch.rand((config['msize'], config['mdim']), dtype=torch.float), dim=1).cuda() # Initialize the memory items
 
-    for epoch in range(args.epochs):
+    for epoch in tqdm(range(args.epochs)):
         labels_list = []
         model.train()
         
@@ -118,17 +104,18 @@ if __name__ == "__main__":
             
         scheduler.step()
         
-        print('----------------------------------------')
-        print('Epoch:', epoch+1)
-        print('Loss: Reconstruction {:.6f}/ Compactness {:.6f}/ Separateness {:.6f}'.format(loss_pixel.item(), compactness_loss.item(), separateness_loss.item()))
-        print('Memory_items:')
-        print(m_items)
-        print('----------------------------------------')
+        # print('----------------------------------------')
+        # print('Epoch:', epoch+1)
+        # print('Loss: Reconstruction {:.6f}/ Compactness {:.6f}/ Separateness {:.6f}'.format(loss_pixel.item(), compactness_loss.item(), separateness_loss.item()))
+        # print('Memory_items:')
+        # print(m_items)
+        # print('----------------------------------------')
         
     print('Training is finished')
     # Save the model and the memory items
-    torch.save(model, os.path.join(log_dir, 'model.pth'))
-    torch.save(m_items, os.path.join(log_dir, 'keys.pt'))
+    os.makedirs(config['model_dir'])
+    torch.save(model, os.path.join(config['model_dir'], 'model.pth'))
+    torch.save(m_items, os.path.join(config['model_dir'], 'keys.pt'))
         
     # sys.stdout = orig_stdout
     # f.close()

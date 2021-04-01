@@ -2,7 +2,7 @@
   "image":{
     "size_x":256,
     "size_y":256,
-    "color": true
+    "color": false
   },
   "window":{
     "size_x":16,

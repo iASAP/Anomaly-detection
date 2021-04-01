@@ -6,9 +6,7 @@ import cv2
 import torch.utils.data as data
 from utils import is_power_of_2, nearest_power_of_2
 
-
 rng = np.random.RandomState(2020)
-
 def np_load_frame(filename, resize_height, resize_width, color=True):
     """
     Load image path and convert it to numpy.ndarray. Notes that the color channels are BGR and the color space
@@ -36,7 +34,7 @@ class DataLoader(data.Dataset):
         self._time_step = time_step
         self._num_pred = num_pred
         self.setup()
-        self.samples = self.get_all_samples()
+        self.frames = self.get_all_samples()
         self.color = color
 
     def setup(self):
@@ -59,8 +57,8 @@ class DataLoader(data.Dataset):
         return frames
 
     def __getitem__(self, index):
-        video_name = self.samples[index].split('/')[-2]
-        frame_name = int(self.samples[index].split('/')[-1].split('.')[-2])
+        video_name = self.frames[index].split('/')[-2]
+        frame_name = int(self.frames[index].split('/')[-1].split('.')[-2])
         
         batch = []
         for i in range(self._time_step+self._num_pred):
@@ -70,9 +68,8 @@ class DataLoader(data.Dataset):
 
         return np.concatenate(batch, axis=0)
         
-        
     def __len__(self):
-        return len(self.samples)
+        return len(self.frames)
 
 
 
@@ -83,8 +80,6 @@ class ChipDataLoader(data.Dataset):
         self.videos = OrderedDict()
         self._time_step = time_step
         self._num_pred = num_pred
-        self.setup()
-        self.samples = self.get_all_samples()
         self.color = color
 
         # set as an (x,y) tuple. Assume x==y if only an integer is provided
@@ -120,6 +115,10 @@ class ChipDataLoader(data.Dataset):
         else:
             self.num_y_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
 
+        self.setup()
+        self.frames = self.get_all_frames()
+
+
 
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, '*'))
@@ -127,25 +126,31 @@ class ChipDataLoader(data.Dataset):
             video_name = video.split('/')[-1]
             self.videos[video_name] = {}
             self.videos[video_name]['path'] = video
-            self.videos[video_name]['frame'] = glob.glob(os.path.join(video, '*.tif'))
-            self.videos[video_name]['frame'].sort()
-            self.videos[video_name]['length'] = len(self.videos[video_name]['frame'])
+            self.videos[video_name]['frames'] = glob.glob(os.path.join(video, '*.tif'))
+            self.videos[video_name]['frames'].sort()
+            self.videos[video_name]['length'] = len(self.videos[video_name]['frames'])
 
-    def get_all_samples(self):
+    def get_all_frames(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, '*'))
         for video in sorted(videos):
             video_name = video.split('/')[-1]
-            for i in range(len(self.videos[video_name]['frame'])-self._time_step):
-                frames.append(self.videos[video_name]['frame'][i])
-
+            for i in range(len(self.videos[video_name]['frames'])-self._time_step):
+                frames.append(self.videos[video_name]['frames'][i])
         return frames
+
+    def get_video(self, index):
+        frame_indx = index//(self.num_x_steps*self.num_y_steps)
+        video_name = self.frames[frame_indx].split('/')[-2]
+        return video_name
 
     def get_frame(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
-        video_name = self.samples[frame_indx].split('/')[-2]
-        frame_name = int(self.samples[frame_indx].split('/')[-1].split('.')[-2])
-        return np_load_frame(self.videos[video_name]['frame'][frame_name+i-1], self.img_size[1], self.img_size[0], color=self.color)
+        return self.frames[index], np_load_frame(self.frames[index], self.img_size[1], self.img_size[0], color=self.color)
+
+    def chips_per_frame(self):
+        """ The number of chips per frame is equal to the self.num_x_steps * self.num_y_steps"""
+        return self.num_x_steps * self.num_y_steps
 
     def __getitem__(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
@@ -154,13 +159,12 @@ class ChipDataLoader(data.Dataset):
         x = x_step*self.step_size[0]
         y = y_step*self.step_size[1]
 
-        video_name = self.samples[frame_indx].split('/')[-2]
-        frame_name = int(self.samples[frame_indx].split('/')[-1].split('.')[-2])
+        video_name = self.frames[frame_indx].split('/')[-2]
+        frame_num = int(self.frames[frame_indx].split('/')[-1].split('.')[-2])
 
         batch = []
         for i in range(self._time_step+self._num_pred):
-            image = np_load_frame(self.videos[video_name]['frame'][frame_name+i-1], self.img_size[1], self.img_size[0], color=self.color)
-
+            image = np_load_frame(self.videos[video_name]['frames'][frame_num+i-1], self.img_size[1], self.img_size[0], color=self.color)
 
             if self.transform is not None:
                 batch.append(self.transform(image)[:,y:y+self.win_size[1], x:x+self.win_size[0]])
@@ -168,4 +172,4 @@ class ChipDataLoader(data.Dataset):
         return np.concatenate(batch, axis=0)
 
     def __len__(self):
-        return len(self.samples)*self.num_x_steps*self.num_y_steps
+        return len(self.frames)*self.num_x_steps*self.num_y_steps
