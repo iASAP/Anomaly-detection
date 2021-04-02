@@ -5,7 +5,7 @@ from bokeh.plotting import figure, output_file, show, curdoc
 import pickle
 
 parser = argparse.ArgumentParser(description="Start a bokeh server to display certain results")
-parser.add_argument('--file', type=str, help='the result pickle file')
+parser.add_argument('--file', type=str, required=True, help='the result pickle file')
 args = parser.parse_args()
 
 with open(args.file, "rb") as fh:

@@ -116,6 +116,9 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     # video_length += videos[videos_list[video_num].split('/')[-1]]['length']
     m_items_test = m_items.clone()
 
+    # anomalous imgs
+    anomalous_indices = []
+
     model.eval()
 
     #print(f"length of dataset = {len(test_dataset)}")
@@ -159,6 +162,11 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
         psnr_list[current_video][chip, frame] = psnr(mse_imgs)
         feature_distance_list[current_video][chip, frame] = mse_feas
 
+        # if there is an anomaly in this frame append the index of this chip to
+        # the list of anomalous_indices
+        if labels_list[frame] == 1:
+            anomalous_indices.append(k)
+
         # increment to if chip < chips_per_frame-1 else 0
         if chip < chips_per_frame-1:
             chip +=1
@@ -167,75 +175,8 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
             frame = frame+1 if frame < frames_per_video-1 else 0
 
 
-    return psnr_list, feature_distance_list, labels_list
+    return psnr_list, feature_distance_list, labels_list, anomalous_indices
 
-
-def plot_results(psnr, fs, labels, output_dir="figures", alpha=0.1):
-    """ Plot results in Bokeh"""
-    # ceate the output directory
-    #date_time_str = str(datetime.datetime.today())
-    #output_dir = os.path.join(output_dir, date_time_str)
-    os.makedirs(output_dir, exist_ok=True)
-
-    chips_per_frame = np.shape(psnr[list(psnr.keys())[0]])[0]
-    print(f"chips_per_frame={chips_per_frame}")
-    anomaly_score_total_list = [[] for i in range(0, chips_per_frame)]
-    
-    for c in range(0, chips_per_frame):
-        for video in sorted(list(psnr.keys())):
-            video_name = video.split('/')[-1]
-            anomaly_score_total_list[c] += score_sum(anomaly_score_list(psnr[video_name][c,:]), 
-                    anomaly_score_list_inv(fs[video_name][c,:]), alpha)
-
-    anomaly_score_total_list = np.asarray(anomaly_score_total_list)
-
-    # do max across chip dimension. this sets the anomaly score for each 
-    # frame as the max score from all of the chips of that frame
-    anomaly_score_max = np.max(anomaly_score_total_list, axis=0)
-    print(f"labels length={len(labels)} other length = {len(anomaly_score_max)}")
-
-    accuracy = AUC(anomaly_score_max, np.expand_dims(1-labels, 0))
-
-    # Generate PRC.
-    p, r, thresholds = metrics.precision_recall_curve(1 - labels, anomaly_score_max)
-    f1_scores = 2*p*r/(p + r)
-    best_idx = np.argmax(f1_scores)
-    best_threshold = thresholds[best_idx]
-
-    # Generate ROC curve.
-    fpr, tpr, thresholds = metrics.roc_curve(1 - labels, anomaly_score_max)
-
-    # generate an output file when 'show' is called
-    output_file(os.path.join(output_dir,"results.html"))
-
-    # Plot ROC
-    p1 = figure(title="ROC Curve", x_axis_label="False Positive Rate", y_axis_label="True Positive Rate")
-    p1.line(fpr, tpr)
-    #p1.circle(fpr[best_idx], tpr[best_idx], size=12, fill_color="red", line_color="red", legend_label="Best F1 Score")
-
-    # Plot PRC
-    p2 = figure(title="PRC Curve", x_axis_label="Recall", y_axis_label="Precision")
-    p2.line(r, p, legend_label="RPC")
-    p2.circle(r[best_idx], p[best_idx], size=12, fill_color="red", line_color="red", legend_label="Best F1 Score")
-
-    # Plot Normality
-    change_points = np.where(np.diff(1 - labels) != 0)[0]
-    p3 = figure(title="Normality", x_axis_label="Time", y_axis_label="Normality Score")
-    colors=['red', 'blue', 'green', 'orange']
-    for c in range(chips_per_frame):
-        p3.line(np.arange(0, change_points[-1]), anomaly_score_total_list[c, 0:change_points[-1]], line_color=colors[c], legend_label=f"Chip {c}")
-    p3.legend.click_policy="hide"
-    
-    left_x = 0
-    anomaly_color = 'red'
-    for right_x in change_points:
-        p3.add_layout(BoxAnnotation(left=left_x, right=right_x, fill_alpha=0.1, fill_color=anomaly_color))
-        anomaly_color = 'green' if anomaly_color=='red' else 'red'
-        left_x=right_x+1
-
-
-    l = layout([[p1, p2], [p3],], sizing_mode='stretch_both')
-    return l
 
 
 
@@ -247,23 +188,31 @@ if __name__ == "__main__":
     parser.add_argument('--th', type=float, default=0.01, help='threshold for test updating')
     parser.add_argument('--truth_dir', default="./../../data", type=str, help='directory of model')
     parser.add_argument('--out_file', default="eval_results.pickle", type=str, help='directory of of results')
+    # parser.add_argument('--p_results', help='whether to plot the results')
+    # parser.add_argument('--p_anomaly', help='whether to plot the anomalous frames')
     args = parser.parse_args()
 
     with open(args.config) as config_file:
         print(f"loading {args.config}")
         config = json.load(config_file)
     
-
     # pass test data through the model
-    psnr, fs, labels = evaluate_model(config, args.truth_dir, args.th)
+    psnr, fs, labels, anomalies = evaluate_model(config, args.truth_dir, args.th)
+
 
     with open(args.out_file, "wb") as fh:
-        pickle.dump((psnr, fs, labels), fh)
+        pickle.dump((psnr, fs, labels, anomalies), fh)
+    
+    # if args.p_results is not None:
+    #     # generate an output file when 'show' is called
+    #     output_file(os.path.join(output_dir,"results.html"))
+        
+    #     # plot the results
+    #     l = plot_results(psnr, fs, labels, alpha=config['alpha'])
+    #     show(l)
 
-    # plot the results
-    l = plot_results(psnr, fs, labels, alpha=config['alpha'])
-    show(l)
-
+    # if args.p_results is not None:
+    #     plot_anomalous_frames(config, psnr, fs, labels, anomalies)
 
 
 

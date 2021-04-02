@@ -107,13 +107,13 @@ class ChipDataLoader(data.Dataset):
             self.win_size = (self.img_size[0], self.win_size[1])
             self.num_x_steps = 1
         else:
-            self.num_x_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
+            self.num_x_steps = len(range(0, self.img_size[0], self.step_size[0]))
 
         if self.win_size[1] >= self.img_size[1]:
             self.win_size = (self.win_size[0], self.img_size[1])
             self.num_y_steps = 1
         else:
-            self.num_y_steps = len(range(0, self.img_size[0]-self.win_size[0], self.step_size[0]))
+            self.num_y_steps = len(range(0, self.img_size[1], self.step_size[1]))
 
         self.setup()
         self.frames = self.get_all_frames()
@@ -145,8 +145,17 @@ class ChipDataLoader(data.Dataset):
         return video_name
 
     def get_frame(self, index):
+        frame_index = index//(self.num_x_steps*self.num_y_steps)
+        return self.frames[frame_index], np_load_frame(self.frames[frame_index], self.img_size[1], self.img_size[0], color=self.color)
+
+    def get_chip_indices(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
-        return self.frames[index], np_load_frame(self.frames[index], self.img_size[1], self.img_size[0], color=self.color)
+        x_step = (index % (self.num_x_steps*self.num_y_steps) ) // self.num_x_steps
+        y_step = (index % (self.num_x_steps*self.num_y_steps) ) % self.num_x_steps
+        x = x_step*self.step_size[0]
+        y = y_step*self.step_size[1]
+        return x,x+self.step_size[0],y,y+self.step_size[1]
+
 
     def chips_per_frame(self):
         """ The number of chips per frame is equal to the self.num_x_steps * self.num_y_steps"""
