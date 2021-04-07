@@ -121,8 +121,8 @@ class ChipDataLoader(data.Dataset):
 
 
     def setup(self):
-        videos = glob.glob(os.path.join(self.dir, '*'))
-        for video in sorted(videos):
+        videos = sorted(glob.glob(os.path.join(self.dir, '*')))
+        for video in videos:
             video_name = video.split('/')[-1]
             self.videos[video_name] = {}
             self.videos[video_name]['path'] = video
@@ -133,7 +133,7 @@ class ChipDataLoader(data.Dataset):
     def get_all_frames(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, '*'))
-        for video in sorted(videos):
+        for video in videos:
             video_name = video.split('/')[-1]
             for i in range(len(self.videos[video_name]['frames'])-self._time_step):
                 frames.append(self.videos[video_name]['frames'][i])

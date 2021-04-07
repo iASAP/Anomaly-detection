@@ -113,7 +113,7 @@ if __name__ == "__main__":
         
     print('Training is finished')
     # Save the model and the memory items
-    os.makedirs(config['model_dir'])
+    os.makedirs(config['model_dir'], exist_ok=True)
     torch.save(model, os.path.join(config['model_dir'], 'model.pth'))
     torch.save(m_items, os.path.join(config['model_dir'], 'keys.pt'))
         
