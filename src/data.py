@@ -156,7 +156,6 @@ class ChipDataLoader(data.Dataset):
         y = y_step*self.step_size[1]
         return x,x+self.step_size[0],y,y+self.step_size[1]
 
-
     def chips_per_frame(self):
         """ The number of chips per frame is equal to the self.num_x_steps * self.num_y_steps"""
         return self.num_x_steps * self.num_y_steps

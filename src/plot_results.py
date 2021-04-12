@@ -1,5 +1,5 @@
 from bokeh.layouts import row, widgetbox, column, Spacer
-from bokeh.models import Label, Select, Div, Legend, LegendItem
+import bokeh.models as bkm
 from bokeh.plotting import figure, output_file, show, curdoc, save
 from bokeh.io import export_png
 import pickle
@@ -66,7 +66,6 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     # Plot Anomaly/Normality score
     # -----------------------------------
-
     # change_points indicate indices where anomalous segments meet normal segments and visa versa
     change_points = np.where(np.diff(1 - labels) != 0)[0]
 
@@ -76,7 +75,6 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     # now add 0 to beginning and forget the last index. We want the starting point of each video, not the ending point
     video_start_x = [0] + video_start_x[0:-1]
-
 
     p3 = figure(title="Anomaly", x_axis_label="Time", y_axis_label="Normality Score", tools="crosshair,hover,pan,reset,box_zoom")
     p3.title.text_font_size="20px"
@@ -111,15 +109,15 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     # build a small info section
     # --------------------------
-    title = Div(text="""<b>INFO</b>""", style={"font-size":"20px"})
+    title = bkm.Div(text="""<b>INFO</b>""", style={"font-size":"20px"})
     #title = Div(text="""<b>INFO</b>""")
     info = column(children=[
             title,
-            Div(text="AUC:         {:1.2}".format(accuracy), style={"font-size":"16px"}), 
-            Div(text=f"img_size:    {config['image']['size_x']}x{config['image']['size_y']}", style={"font-size":"16px"}),
-            Div(text=f"chip_size:    {config['window']['size_x']}x{config['window']['size_y']}", style={"font-size":"16px"}),
-            Div(text=f"chip_stride:    {config['window']['step_x']}x{config['window']['step_y']}", style={"font-size":"16px"}),
-            Spacer(sizing_mode="stretch_height")
+            bkm.Div(text="AUC:         {:1.2}".format(accuracy), style={"font-size":"16px"}), 
+            bkm.Div(text=f"img_size:    {config['image']['size_x']}x{config['image']['size_y']}", style={"font-size":"16px"}),
+            bkm.Div(text=f"chip_size:    {config['window']['size_x']}x{config['window']['size_y']}", style={"font-size":"16px"}),
+            bkm.Div(text=f"chip_stride:    {config['window']['step_x']}x{config['window']['step_y']}", style={"font-size":"16px"}),
+            bkm.Spacer(sizing_mode="stretch_height")
             ],max_width=150, sizing_mode="stretch_height")
 
 
@@ -127,7 +125,7 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     return l
 
 
-def plot_frames(anomaly_scores, labels, config, frame_start=170, frame_stop=185):
+def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
     """  """
     #ai = np.asarray(ai)
 
@@ -139,6 +137,7 @@ def plot_frames(anomaly_scores, labels, config, frame_start=170, frame_stop=185)
 
     dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
     cpf = dataset.chips_per_frame()
+    win_w, win_h = win_size
 
     # Build the anomaly score for each frame
     # anomaly_score_total_list = [[] for i in range(0, cpf)]
@@ -158,18 +157,47 @@ def plot_frames(anomaly_scores, labels, config, frame_start=170, frame_stop=185)
 
     #for i, k in enumerate(ai[anomaly_range]):
     for i, frame_index in enumerate(range(frame_start, frame_stop)):
-        new_path,frame = dataset.get_frame(frame_index*cpf)
-        temp = new_path.split('/')[-2::]
-        p = figure(title=f"{os.path.join(temp[0], temp[1])} - {labels[frame_index]}", plot_width=300, plot_height=300)
-        p.xgrid.visible = False
-        p.ygrid.visible = False 
-        p.image(image=[np.flipud(frame)], x=0, y=0, dw=256, dh=256, level="image")
+
+        # keep track of the max chip 
+        data = {
+              "scores" : [],
+              "x" : [],
+              "y" : [],
+              "colors" : []
+              }
 
         for c in range(cpf):
+            chip_score = 1-anomaly_scores[c, frame_index]
+            data['scores'].append(chip_score)
+            data['colors'].append((int(255*chip_score), 0, 0))
+
             chip_index = frame_index*cpf + c
-            red = int(255*(1-anomaly_scores[c, frame_index]))
             x1,x2,y1,y2 = dataset.get_chip_indices(chip_index)
-            p.add_layout(BoxAnnotation(left=x1, right=x2, bottom=256-y2, top=256-y1, fill_alpha=0.6, fill_color=(red, 0, 0)))
+            #print(f"{x  {y1}-{y2}")
+
+            # these coordinates should be the center of the chip
+            data['x'].append(x2-(win_w//2))
+            data['y'].append(256- (y2-(win_h//2)))
+
+
+        new_path,frame = dataset.get_frame(frame_index*cpf)
+        temp = new_path.split('/')[-2::]
+        p = figure(title=f"{os.path.join(temp[0], temp[1])} - {labels[frame_index]}", plot_width=300, plot_height=300,  tools=[])
+        p.xgrid.visible = False
+        p.ygrid.visible = False 
+        p.image(image=[np.flipud(frame)], dw=256, dh=256, x=0, y=0)
+
+
+        #p.rect(chip_xs, chip_ys, width=win_w, height=win_h, fill_color=colors, fill_alpha=0.6, line_color=None)
+        chip_glyph = bkm.Rect(width=win_w, height=win_h, fill_color="colors", fill_alpha=0.6, line_color=None)
+        chip_r = p.add_glyph(bkm.ColumnDataSource(data), chip_glyph)
+        
+        max_index = data['scores'].index(max(data['scores']))
+        p.rect(x=data['x'][max_index], y=data['y'][max_index], width=win_w, height=win_h, fill_color=None, fill_alpha=0.6, line_color='blue')
+
+        hover_tool = bkm.HoverTool(renderers=[chip_r], tooltips=[("chip","$index"),("score", "@scores")])
+        p.add_tools(hover_tool)
+
 
         # add this plot to the current row of plots
         row.append(p)
@@ -195,8 +223,9 @@ def plot_frames(anomaly_scores, labels, config, frame_start=170, frame_stop=185)
         #     row.append(p)
 
 
-    # if (len(row) != 0):
-        # plots.append(row)
+    if (len(row) != 0):
+        plots.append(row)
+
 
     l = gridplot(plots)
     
