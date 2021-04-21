@@ -1,10 +1,14 @@
 from bokeh.layouts import row, widgetbox, column, Spacer
+from pathlib import Path
 import bokeh.models as bkm
+import bokeh.palettes as bp
 from bokeh.plotting import figure, output_file, show, curdoc, save
 from bokeh.io import export_png
 import pickle
 from evaluate import *
 from itertools import accumulate
+
+
 
 def plot_results(anomaly_scores, labels, config, output_dir="."):
     """ Plot results in Bokeh"""
@@ -21,17 +25,6 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
 
-    # cpf = np.shape(psnr[list(psnr.keys())[0]])[0]
-    # anomaly_score_total_list = [[] for i in range(0, cpf)]
-    
-    # for c in range(0, cpf):
-    #     for video in sorted(list(psnr.keys())):
-    #         video_name = video.split('/')[-1]
-    #         anomaly_score_total_list[c] += score_sum(anomaly_score_list(psnr[video_name][c,:]), 
-    #                 anomaly_score_list_inv(fs[video_name][c,:]), config['alpha'])
-
-    # anomaly_score_total_list = np.asarray(anomaly_score_total_list)
-
     # do max across chip dimension. this sets the anomaly score for each 
     # frame as the max score from all of the chips of that frame
     anomaly_score_max = np.max(anomaly_scores, axis=0)
@@ -43,7 +36,6 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     # Generate ROC curve.
     fpr, tpr, thresholds = metrics.roc_curve(1 - labels, anomaly_score_max)
-
 
     # Plot ROC
     # --------
@@ -76,12 +68,21 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     # now add 0 to beginning and forget the last index. We want the starting point of each video, not the ending point
     video_start_x = [0] + video_start_x[0:-1]
 
-    p3 = figure(title="Anomaly", x_axis_label="Time", y_axis_label="Normality Score", tools="crosshair,hover,pan,reset,box_zoom")
+    p3 = figure(title="Normality", x_axis_label="Time", y_axis_label="Normality Score", tools=[])
     p3.title.text_font_size="20px"
 
     # plot the anomaly score for each frame (determined by the max of frames chips)
-    anomaly_score_plot = p3.line(np.arange(0, change_points[-1]), anomaly_score_max, legend_label="max anomaly score")
-    p3.legend.click_policy="hide"
+    data = {
+          "max_scores" : anomaly_score_max,
+          "frames" : ['/'.join(i.split("/")[-2::]) for i in cdl.seq_stops],
+          "x" : np.arange(0, len(anomaly_score_max)),
+          "y" : anomaly_score_max,
+          #"legend_label" : "max_anomaly_score",
+          }
+
+    #anomaly_score_plot = p3.line(np.arange(0, change_points[-1]), anomaly_score_max, legend_label="max anomaly score")
+    #anomaly_line_glyph = bkm.Line(, legend_label="max anomaly score")
+    anomaly_line_r = p3.add_glyph(bkm.ColumnDataSource(data), bkm.Line(line_color='#3288bd'))
 
     # plot the threshold
     threshold_plot = p3.segment(x0=0, y0=best_threshold, x1=len(labels), y1=best_threshold, line_color="red", legend_label="Best Threshold")
@@ -99,11 +100,16 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     
     # plot
     left_x = 0
-    color = 'red'
-    for right_x in change_points:
+    color = 'green'
+    for right_x in np.append(change_points, len(labels)-1):
         p3.add_layout(BoxAnnotation(left=left_x, right=right_x, fill_alpha=0.1, fill_color=color))
         color = 'green' if color=='red' else 'red'
         left_x=right_x+1
+        
+
+    hover_tool = bkm.HoverTool(renderers=[anomaly_line_r], tooltips=[("index","$index"),("frame","@frames"),("max score", "@max_scores")])
+    p3.add_tools(hover_tool, bkm.BoxZoomTool(), bkm.ResetTool())
+    p3.legend.click_policy="hide"
 
 
 
@@ -121,11 +127,10 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
             ],max_width=150, sizing_mode="stretch_height")
 
 
-    l = layout([[p1, p2], [info, p3],], sizing_mode='stretch_both')
-    return l
+    return p1, p2, p3, info
 
 
-def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
+def plot_frames(anomaly_scores, labels, config, frame_start=1600, frame_stop=1630):
     """  """
     #ai = np.asarray(ai)
 
@@ -152,10 +157,12 @@ def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
     
     # iterate over all of the chips and get the anomalous frames
     #anomaly_range = np.arange(frame_start*cpf, frame_stop*cpf)
+    color_mapper = bkm.LinearColorMapper(palette='Turbo256', low=0, high=1)
+
     plots = []
     row = []
 
-    #for i, k in enumerate(ai[anomaly_range]):
+    # for i, k in enumerate(ai[anomaly_range]):
     for i, frame_index in enumerate(range(frame_start, frame_stop)):
 
         # keep track of the max chip 
@@ -163,17 +170,15 @@ def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
               "scores" : [],
               "x" : [],
               "y" : [],
-              "colors" : []
               }
 
         for c in range(cpf):
             chip_score = 1-anomaly_scores[c, frame_index]
             data['scores'].append(chip_score)
-            data['colors'].append((int(255*chip_score), 0, 0))
 
             chip_index = frame_index*cpf + c
             x1,x2,y1,y2 = dataset.get_chip_indices(chip_index)
-            #print(f"{x  {y1}-{y2}")
+            #print(f"{x2}-{x1}  {y1}-{y2}")
 
             # these coordinates should be the center of the chip
             data['x'].append(x2-(win_w//2))
@@ -184,20 +189,18 @@ def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
         temp = new_path.split('/')[-2::]
         p = figure(title=f"{os.path.join(temp[0], temp[1])} - {labels[frame_index]}", plot_width=300, plot_height=300,  tools=[])
         p.xgrid.visible = False
-        p.ygrid.visible = False 
+        p.ygrid.visible = False
         p.image(image=[np.flipud(frame)], dw=256, dh=256, x=0, y=0)
 
-
         #p.rect(chip_xs, chip_ys, width=win_w, height=win_h, fill_color=colors, fill_alpha=0.6, line_color=None)
-        chip_glyph = bkm.Rect(width=win_w, height=win_h, fill_color="colors", fill_alpha=0.6, line_color=None)
+        chip_glyph = bkm.Rect(width=win_w, height=win_h, fill_color={'field':'scores', 'transform':color_mapper}, fill_alpha=0.6, line_color=None)
         chip_r = p.add_glyph(bkm.ColumnDataSource(data), chip_glyph)
         
         max_index = data['scores'].index(max(data['scores']))
-        p.rect(x=data['x'][max_index], y=data['y'][max_index], width=win_w, height=win_h, fill_color=None, fill_alpha=0.6, line_color='blue')
+        p.rect(x=data['x'][max_index], y=data['y'][max_index], width=win_w, height=win_h, fill_color=None, fill_alpha=0.6, line_color='red')
 
         hover_tool = bkm.HoverTool(renderers=[chip_r], tooltips=[("chip","$index"),("score", "@scores")])
         p.add_tools(hover_tool)
-
 
         # add this plot to the current row of plots
         row.append(p)
@@ -227,36 +230,77 @@ def plot_frames(anomaly_scores, labels, config, frame_start=48, frame_stop=66):
         plots.append(row)
 
 
-    l = gridplot(plots)
+    #l = gridplot(plots)
+    # color_bar_figure = figure(plot_width=300, plot_height=300)
+    # color_bar = bkm.ColorBar(color_mapper=color_mapper)
+    # color_bar_figure.add_layout(color_bar, "below")
+
+    # plots.insert(0, color_bar_figure)
+    l = layout(plots)
     
     return l
 
+def make_html_index(path=".."):
+    fh = open(Path(path).joinpath("index.html").resolve(), 'w')
+    fh.write("<html><head></head><body><ul>")
+
+    # write links
+    for p in Path("..").rglob("*.html"):
+        parts = p.parts[-2::]
+        href = Path('/', parts[0], parts[1])
+        fh.write(f'<li><a href="{href}" target="_blank">{href}</a></li>')
+
+    fh.write("</ul></body></html>")
+    fh.close()
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Start a bokeh server to display certain results")
-    parser.add_argument('--infile', type=str, required=True, help='the result pickle file')
-    parser.add_argument('--png', action='store_const', const=True , default=False, help='whether or not to additionally save plots as png')
+    parser = argparse.ArgumentParser(description="Plot results from an evaluated pickle. Defaults to the latest modified pickle file in the current directory.")
+    parser.add_argument('--infile', type=str, help='A specific pickle file to plot results from')
+    parser.add_argument('--all', action='store_const', const=True, default=False, help="plot results from all pickle files in the current directory. Option 'infile' overrides this")
+    parser.add_argument('--png', action='store_const', const=True , default=False, help='whether or not to additionally save plots as png (Currently Broken?)')
     parser.add_argument('--show', action='store_const', const=True , default=False, help='whether or not to show the plots')
+    parser.add_argument('--frame_range', type=str, default="(45, 70)", help='the range of frame to plot for one of the plots')
     args = parser.parse_args()
-    
+
+    min_frame, max_frame = eval(args.frame_range)
+
+
+    # default implementation uses the latest modified pickle 
+    files_to_plot = [max(glob.glob("*.pickle"), key=os.path.getctime)]
+
+    # use all pickle files instead
+    if args.all: files_to_plot = glob.glob("*.pickle")
+
+    # use only the specified pickle
+    if args.infile: files_to_plot = [args.infile]
+
     # load results
-    with open(args.infile, "rb") as fh:
-        anomaly_scores, labels, config = pickle.load(fh)
+    for f in files_to_plot:
+        print(f"plotting results from - {f}")
+        with open(f, "rb") as fh:
+            anomaly_scores, labels, config = pickle.load(fh)
 
-    # 
-    w = config['image']['size_x'] // config['window']['size_x']
-    h = config['image']['size_y'] // config['window']['size_y']
+        # 
+        w = config['image']['size_x'] // config['window']['size_x']
+        h = config['image']['size_y'] // config['window']['size_y']
 
-    # plot results
-    p1 = plot_results(anomaly_scores, labels, config)
-    save(p1, filename=f"{w}x{h}_results.html", title="Results")
-    if args.png: export_png(p1, filename=f"{w}x{h}_results.png")
-    if args.show: show(p1)
+        # plot results
+        p1, p2, p3, info = plot_results(anomaly_scores, labels, config)
+        l1 = layout([[p1, p2], [info, p3],], sizing_mode='stretch_both')
+        #curdoc().theme = 'dark_minimal'
+        save(l1, filename=f"{w}x{h}_results.html", title="Results")
+        if args.png: export_png(l1, filename=f"{w}x{h}_results.png")
+        if args.show: show(l1)
 
-    # plot anomalies
-    p2 = plot_frames(anomaly_scores, labels, config)
-    save(p2, filename=f"{w}x{h}_frames.html", title="Anomalies")
-    if args.png: export_png(p2, filename=f"{w}x{h}_frames.png")
-    if args.show: show(p2)
+        # plot anomalies
+        p4 = plot_frames(anomaly_scores, labels, config, min_frame, max_frame)
+        save(p4, filename=f"{w}x{h}_frames.html", title="Anomalies")
+        if args.png: export_png(p4, filename=f"{w}x{h}_frames.png")
+        if args.show: show(p4)
+
+    #TODO: create html file
+    make_html_index()
+
 
     
 

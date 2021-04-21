@@ -116,8 +116,14 @@ class ChipDataLoader(data.Dataset):
             self.num_y_steps = len(range(0, self.img_size[1], self.step_size[1]))
 
         self.setup()
-        self.frames = self.get_all_frames()
 
+        # since this DataLoader loads a sequence of frames, this will get all of
+        # the frames that are the start of a sequence
+        self.seq_starts = self.get_start_frames()
+        
+        # get all of the frames that are the end of a sequence
+        # (These are the frames that are being re-created by the model)
+        self.seq_stops = self.get_stop_frames()
 
 
     def setup(self):
@@ -126,27 +132,39 @@ class ChipDataLoader(data.Dataset):
             video_name = video.split('/')[-1]
             self.videos[video_name] = {}
             self.videos[video_name]['path'] = video
-            self.videos[video_name]['frames'] = glob.glob(os.path.join(video, '*.tif'))
-            self.videos[video_name]['frames'].sort()
+            self.videos[video_name]['frames'] = sorted(glob.glob(os.path.join(video, '*.tif')))
             self.videos[video_name]['length'] = len(self.videos[video_name]['frames'])
 
-    def get_all_frames(self):
+    def get_start_frames(self):
         frames = []
-        videos = glob.glob(os.path.join(self.dir, '*'))
-        for video in videos:
+        for video in self.videos:
             video_name = video.split('/')[-1]
             for i in range(len(self.videos[video_name]['frames'])-self._time_step):
                 frames.append(self.videos[video_name]['frames'][i])
         return frames
 
+    def get_stop_frames(self):
+        frames = []
+        for video in self.videos:
+            video_name = video.split('/')[-1]
+            for i in range(self._time_step, len(self.videos[video_name]['frames'])):
+                frames.append(self.videos[video_name]['frames'][i])
+        return frames
+
     def get_video(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
-        video_name = self.frames[frame_indx].split('/')[-2]
+        video_name = self.seq_starts[frame_indx].split('/')[-2]
         return video_name
 
     def get_frame(self, index):
         frame_index = index//(self.num_x_steps*self.num_y_steps)
-        return self.frames[frame_index], np_load_frame(self.frames[frame_index], self.img_size[1], self.img_size[0], color=self.color)
+        #video_name = self.frames[seq_index].split('/')[-2]
+
+        # the frame index represents the starting point of a sequency of frames but we want the last
+        #frame_num = int(self.frames[seq_index].split('/')[-1].split('.')[-2])+self._time_step
+        
+        #frame_path = self.videos[video_name]['frames'][frame_num-1]
+        return self.seq_stops[frame_index], np_load_frame(self.seq_stops[frame_index], self.img_size[1], self.img_size[0], color=self.color)
 
     def get_chip_indices(self, index):
         frame_indx = index//(self.num_x_steps*self.num_y_steps)
@@ -167,8 +185,8 @@ class ChipDataLoader(data.Dataset):
         x = x_step*self.step_size[0]
         y = y_step*self.step_size[1]
 
-        video_name = self.frames[frame_indx].split('/')[-2]
-        frame_num = int(self.frames[frame_indx].split('/')[-1].split('.')[-2])
+        video_name = self.seq_starts[frame_indx].split('/')[-2]
+        frame_num = int(self.seq_starts[frame_indx].split('/')[-1].split('.')[-2])
 
         batch = []
         for i in range(self._time_step+self._num_pred):
@@ -180,4 +198,4 @@ class ChipDataLoader(data.Dataset):
         return np.concatenate(batch, axis=0)
 
     def __len__(self):
-        return len(self.frames)*self.num_x_steps*self.num_y_steps
+        return len(self.seq_starts)*self.num_x_steps*self.num_y_steps

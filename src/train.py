@@ -37,17 +37,14 @@ if __name__ == "__main__":
     with open(args.config) as config_file:
         config = json.load(config_file)
 
-
     torch.manual_seed(2020)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = config['gpus']
     torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-
     print('Creating dataloaders...')
 
     train_dir = os.path.join(config['dataset_path'], config['dataset_type'], "training", "frames/")
-    test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames/")
 
     # Loading dataset
     # train_dataset = DataLoader(train_dir, transforms.Compose([
@@ -69,7 +66,7 @@ if __name__ == "__main__":
     # Model setting
     print('Initializing model...')
     model = convAE(n_channel, config['t_length'], config['msize'], config['fdim'], config['mdim'])
-    params_encoder =  list(model.encoder.parameters()) 
+    params_encoder = list(model.encoder.parameters()) 
     params_decoder = list(model.decoder.parameters())
     params = params_encoder + params_decoder
     optimizer = torch.optim.Adam(params, lr = config['lr'])
@@ -78,7 +75,6 @@ if __name__ == "__main__":
 
 
     # Report the training process
-
     loss_func_mse = nn.MSELoss(reduction='none')
 
     # Training

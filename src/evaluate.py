@@ -4,7 +4,7 @@ import sys
 import json
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F 
 import torch.optim as optim
 import torchvision
 import torch.nn.init as init
@@ -62,8 +62,7 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     test_size = len(test_dataset)
 
 
-
-    test_batch = data.DataLoader(test_dataset, batch_size=1, 
+    test_batch = data.DataLoader(test_dataset, batch_size=config['batch_size'], 
                                  shuffle=False, num_workers=config['num_workers_test'], drop_last=False)
 
     loss_func_mse = nn.MSELoss(reduction='none')
@@ -123,67 +122,77 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     #print(f"length of dataset = {len(test_dataset)}")
     current_video = ""
     frames_per_video = 0
-    frame = 0
+    k = 0
+
     chips_per_frame = test_dataset.chips_per_frame()
-    chip = 0
-    for k,imgs in enumerate(tqdm(test_batch)):
+    chips_by_frames = (chips_per_frame, len(test_dataset)//chips_per_frame)
+    print(f'chips, frames = {chips_by_frames}')
+    psnr_list = np.zeros(chips_by_frames)
+    feature_distance_list = np.zeros(chips_by_frames)
+
+    for imgs in tqdm(test_batch):
+
+
+        #print(f'input = {imgs.shape}')
         imgs = Variable(imgs).cuda()
 
         outputs, feas, updated_feas, m_items_test, softmax_score_query, softmax_score_memory, _, _, _, compactness_loss = model.forward(imgs[:,0:indx_of_inflection], m_items_test, False)
-        mse_imgs = torch.mean(loss_func_mse((outputs[0]+1)/2, (imgs[0,indx_of_inflection:]+1)/2)).item()
-        mse_feas = compactness_loss.item()
 
-        # Save normal data for next loop.
-        imgs_prev = imgs
-        updated_feas_prev = updated_feas
-        outputs_prev = outputs
+        #print(f'outputs = {outputs.shape}')
+        #print(f'compactness_loss = {compactness_loss.item()}')
+        
+        # loop over batch dimension
+        for i in range(len(imgs)):
+            mse_imgs = torch.mean(loss_func_mse((outputs[i]+1)/2, (imgs[i,indx_of_inflection:]+1)/2)).item()
+            mse_feas = compactness_loss.item()
+            #print(f'output = {len(mse_imgs)}')
 
-        # Calculating the threshold for updating at the test time
-        point_sc = point_score(outputs, imgs[:,indx_of_inflection:])
+            # Save normal data for next loop.
+            #imgs_prev = imgs
+            #updated_feas_prev = updated_feas
+            #outputs_prev = outputs
 
-        # Decide if we need to update the memory.
-        if point_sc < th:
-            query = F.normalize(feas, dim=1)
-            query = query.permute(0,2,3,1) # b X h X w X d
-            m_items_test = model.memory.update(query, m_items_test, False)
-        else:
-            a = 0
-        # Update PSNR and distance lists.
-        new_video = test_dataset.get_video(k)
-        if (new_video != current_video):
-            frames_per_video = videos[new_video]['length']-(config['t_length']-1)
-            chips_by_frames = (chips_per_frame, frames_per_video)
-            psnr_list[new_video] = np.zeros(chips_by_frames)
-            feature_distance_list[new_video] = np.zeros(chips_by_frames)
-            current_video = new_video
+            # Calculating the threshold for updating at the test time
+            point_sc = point_score(outputs, imgs[:,indx_of_inflection:])
 
-        psnr_list[current_video][chip, frame] = psnr(mse_imgs)
-        feature_distance_list[current_video][chip, frame] = mse_feas
+            # Decide if we need to update the memory.
+            if point_sc < th:
+                query = F.normalize(feas, dim=1)
+                query = query.permute(0,2,3,1) # b X h X w X d
+                m_items_test = model.memory.update(query, m_items_test, False)
+            else:
+                a = 0
+            
+            frame = k//chips_per_frame
+            chip = k%chips_per_frame
+            #print(f'chip, frame = {chip}, {frame}\n')
 
-        # if there is an anomaly in this frame append the index of this chip to
-        # the list of anomalous_indices
-        #if labels_list[frame] == 1:
-        #    anomalous_indices.append(k)
+            psnr_list[chip, frame] = psnr(mse_imgs)
+            feature_distance_list[chip, frame] = mse_feas
+            k += 1
 
-        # increment to if chip < chips_per_frame-1 else 0
-        if chip < chips_per_frame-1:
-            chip +=1
-        else:
-            chip = 0
-            frame = frame+1 if frame < frames_per_video-1 else 0
+    if config['anomaly_context']=="video":
+        anomaly_score_total_list = [np.empty((1,0)) for i in range(0, chips_per_frame)]
+        for c in range(0, chips_per_frame):
+            start = 0
+            stop = 0
+            for v in videos_list:
+                v_name = v.split('/')[-1]
+                stop += test_dataset.videos[v_name]['length']-(config['t_length']-1)
+                #print(f"{c},{v_name} : {start}-{stop}")
+                anomaly_score_total_list[c] = np.append(anomaly_score_total_list[c], score_sum(anomaly_score_array(psnr_list[c,start:stop]), anomaly_score_array_inv(feature_distance_list[c,start:stop]), config['alpha']))
+                start=stop
 
+    elif config['anomaly_context']=="all":
+        psnr_array = np.asarray(psnr_list).flatten()
+        feature_distance_array = np.asarray(feature_distance_list).flatten()
+        temp = score_sum(anomaly_score_array(psnr_array), anomaly_score_array_inv(feature_distance_array), config['alpha'])
+        anomaly_score_total_list = temp.reshape((psnr_list.shape[0], psnr_list.shape[1]))
 
-    anomaly_score_total_list = [np.empty((1,0)) for i in range(0, chips_per_frame)]
-    for c in range(0, chips_per_frame):
-        for video in videos_list:
-            video_name = video.split('/')[-1]
+    else:
+        anomaly_score_total_list = [score_sum(anomaly_score_array(psnr_list[c,:]), anomaly_score_array_inv(feature_distance_list[c,:]), config['alpha']) for c in range(chips_per_frame)]
 
-            anomaly_score_total_list[c] = np.append(anomaly_score_total_list[c], score_sum(anomaly_score_array(psnr_list[video_name][c,:]), 
-                    anomaly_score_array_inv(feature_distance_list[video_name][c,:]), config['alpha']))
-
-    #anomaly_score_total_list = np.asarray(anomaly_score_total_list)
-
-
+    # turn into numpy array and return everything
     return np.asarray(anomaly_score_total_list), labels_list
 
 
@@ -197,8 +206,6 @@ if __name__ == "__main__":
     parser.add_argument('--th', type=float, default=0.01, help='threshold for test updating')
     parser.add_argument('--truth_dir', default="./../../data", type=str, help='directory of model')
     parser.add_argument('--outfile', default="", type=str, help='directory of of results')
-    # parser.add_argument('--p_results', help='whether to plot the results')
-    # parser.add_argument('--p_anomaly', help='whether to plot the anomalous frames')
     args = parser.parse_args()
 
     with open(args.config) as config_file:
@@ -221,16 +228,4 @@ if __name__ == "__main__":
         #pickle.dump((psnr, fs, labels, anomalies, config), fh)
         pickle.dump((anomaly_scores, labels, config), fh)
     
-    # if args.p_results is not None:
-    #     # generate an output file when 'show' is called
-    #     output_file(os.path.join(output_dir,"results.html"))
-        
-    #     # plot the results
-    #     l = plot_results(psnr, fs, labels, alpha=config['alpha'])
-    #     show(l)
-
-    # if args.p_results is not None:
-    #     plot_anomalous_frames(config, psnr, fs, labels, anomalies)
-
-
 
