@@ -94,6 +94,7 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     print('----------------- INFO --------------------')
     print(f'test dataset:  {test_dir}')
     print(f'model:         {model_dir}')
+    print(f'anomaly_context:   {config["anomaly_context"]}')
     print(f'ChipDataLoader:  ')
     print(f'    img_size:    {test_dataset.img_size}')
     print(f'    chip_size:   {test_dataset.win_size}')
@@ -171,8 +172,8 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
             feature_distance_list[chip, frame] = mse_feas
             k += 1
 
-    if config['anomaly_context']=="video":
-        anomaly_score_total_list = [np.empty((1,0)) for i in range(0, chips_per_frame)]
+    if config['anomaly_context']=="chips_video":
+        normality_score_total_list = [np.empty((1,0)) for i in range(0, chips_per_frame)]
         for c in range(0, chips_per_frame):
             start = 0
             stop = 0
@@ -180,20 +181,23 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
                 v_name = v.split('/')[-1]
                 stop += test_dataset.videos[v_name]['length']-(config['t_length']-1)
                 #print(f"{c},{v_name} : {start}-{stop}")
-                anomaly_score_total_list[c] = np.append(anomaly_score_total_list[c], score_sum(anomaly_score_array(psnr_list[c,start:stop]), anomaly_score_array_inv(feature_distance_list[c,start:stop]), config['alpha']))
+                normality_score_total_list[c] = np.append(normality_score_total_list[c], score_sum(anomaly_score_array(psnr_list[c,start:stop]), anomaly_score_array_inv(feature_distance_list[c,start:stop]), config['alpha']))
                 start=stop
 
     elif config['anomaly_context']=="all":
         psnr_array = np.asarray(psnr_list).flatten()
         feature_distance_array = np.asarray(feature_distance_list).flatten()
         temp = score_sum(anomaly_score_array(psnr_array), anomaly_score_array_inv(feature_distance_array), config['alpha'])
-        anomaly_score_total_list = temp.reshape((psnr_list.shape[0], psnr_list.shape[1]))
+        normality_score_total_list = temp.reshape((psnr_list.shape[0], psnr_list.shape[1]))
+
+    elif config['anomaly_context'] == "chips":
+        normality_score_total_list = [score_sum(anomaly_score_array(psnr_list[c,:]), anomaly_score_array_inv(feature_distance_list[c,:]), config['alpha']) for c in range(chips_per_frame)]
 
     else:
-        anomaly_score_total_list = [score_sum(anomaly_score_array(psnr_list[c,:]), anomaly_score_array_inv(feature_distance_list[c,:]), config['alpha']) for c in range(chips_per_frame)]
+        print(f"Unrecognized anomaly_context method: {config['anomaly_context']}")
 
     # turn into numpy array and return everything
-    return np.asarray(anomaly_score_total_list), labels_list
+    return np.asarray(normality_score_total_list), labels_list
 
 
 
@@ -222,7 +226,7 @@ if __name__ == "__main__":
     if (outfile == ""):
         w = config['image']['size_x'] // config['window']['size_x']
         h = config['image']['size_y'] // config['window']['size_y']
-        outfile = f"{w}x{h}_eval.pickle"
+        outfile = f"{w}x{h}_{config['anomaly_context']}.pickle"
 
     with open(outfile, "wb") as fh:
         #pickle.dump((psnr, fs, labels, anomalies, config), fh)

@@ -10,7 +10,7 @@ from itertools import accumulate
 
 
 
-def plot_results(anomaly_scores, labels, config, output_dir="."):
+def plot_results(normality_scores, labels, config, output_dir="."):
     """ Plot results in Bokeh"""
     # ceate the output directory
     #date_time_str = str(datetime.datetime.today())
@@ -23,19 +23,22 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
+    w = config['image']['size_x'] // config['window']['size_x']
+    h = config['image']['size_y'] // config['window']['size_y']
+
     cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
 
     # do max across chip dimension. this sets the anomaly score for each 
     # frame as the max score from all of the chips of that frame
-    anomaly_score_max = np.max(anomaly_scores, axis=0)
+    anomaly_score_max = np.max(1-normality_scores, axis=0)
     print(f"labels length={len(labels)} other length = {len(anomaly_score_max)}")
 
-    accuracy = AUC(anomaly_score_max, np.expand_dims(1-labels, 0))
+    accuracy = AUC(anomaly_score_max, np.expand_dims(labels, 0))
 
     # Generate PRC.
 
     # Generate ROC curve.
-    fpr, tpr, thresholds = metrics.roc_curve(1 - labels, anomaly_score_max)
+    fpr, tpr, thresholds = metrics.roc_curve(labels, anomaly_score_max)
 
     # Plot ROC
     # --------
@@ -46,7 +49,7 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
 
     # Plot PRC
     # --------
-    p, r, thresholds = metrics.precision_recall_curve(1 - labels, anomaly_score_max)
+    p, r, thresholds = metrics.precision_recall_curve(labels, anomaly_score_max)
     f1_scores = 2*p*r/(p + r)
     best_idx = np.argmax(f1_scores)
     best_threshold = thresholds[best_idx]
@@ -68,7 +71,7 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     # now add 0 to beginning and forget the last index. We want the starting point of each video, not the ending point
     video_start_x = [0] + video_start_x[0:-1]
 
-    p3 = figure(title="Normality", x_axis_label="Time", y_axis_label="Normality Score", tools=[])
+    p3 = figure(title="Anomaly", x_axis_label="Time", y_axis_label="Normality Score", tools=[])
     p3.title.text_font_size="20px"
 
     # plot the anomaly score for each frame (determined by the max of frames chips)
@@ -123,6 +126,8 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
             bkm.Div(text=f"img_size:    {config['image']['size_x']}x{config['image']['size_y']}", style={"font-size":"16px"}),
             bkm.Div(text=f"chip_size:    {config['window']['size_x']}x{config['window']['size_y']}", style={"font-size":"16px"}),
             bkm.Div(text=f"chip_stride:    {config['window']['step_x']}x{config['window']['step_y']}", style={"font-size":"16px"}),
+            bkm.Div(text=f" w x h:    {w}x{h}", style={"font-size":"16px"}),
+            bkm.Div(text=f"anomaly_context:    {config['anomaly_context']}", style={"font-size":"16px"}),
             bkm.Spacer(sizing_mode="stretch_height")
             ],max_width=150, sizing_mode="stretch_height")
 
@@ -130,7 +135,7 @@ def plot_results(anomaly_scores, labels, config, output_dir="."):
     return p1, p2, p3, info
 
 
-def plot_frames(anomaly_scores, labels, config, frame_start=1600, frame_stop=1630):
+def plot_frames(normality_scores, labels, config, frame_start=1600, frame_stop=1630):
     """  """
     #ai = np.asarray(ai)
 
@@ -173,7 +178,7 @@ def plot_frames(anomaly_scores, labels, config, frame_start=1600, frame_stop=163
               }
 
         for c in range(cpf):
-            chip_score = 1-anomaly_scores[c, frame_index]
+            chip_score = 1-normality_scores[c, frame_index]
             data['scores'].append(chip_score)
 
             chip_index = frame_index*cpf + c
@@ -278,24 +283,26 @@ if __name__ == "__main__":
     for f in files_to_plot:
         print(f"plotting results from - {f}")
         with open(f, "rb") as fh:
-            anomaly_scores, labels, config = pickle.load(fh)
+            normality_scores, labels, config = pickle.load(fh)
 
         # 
         w = config['image']['size_x'] // config['window']['size_x']
         h = config['image']['size_y'] // config['window']['size_y']
 
         # plot results
-        p1, p2, p3, info = plot_results(anomaly_scores, labels, config)
+        p1, p2, p3, info = plot_results(normality_scores, labels, config)
         l1 = layout([[p1, p2], [info, p3],], sizing_mode='stretch_both')
+
+        pickle_name = f.split(".")[0]
         #curdoc().theme = 'dark_minimal'
-        save(l1, filename=f"{w}x{h}_results.html", title="Results")
-        if args.png: export_png(l1, filename=f"{w}x{h}_results.png")
+        save(l1, filename=f"{pickle_name}_results.html", title="Results")
+        if args.png: export_png(l1, filename=f"{pickle_name}_results.png")
         if args.show: show(l1)
 
         # plot anomalies
-        p4 = plot_frames(anomaly_scores, labels, config, min_frame, max_frame)
-        save(p4, filename=f"{w}x{h}_frames.html", title="Anomalies")
-        if args.png: export_png(p4, filename=f"{w}x{h}_frames.png")
+        p4 = plot_frames(normality_scores, labels, config, min_frame, max_frame)
+        save(p4, filename=f"{pickle_name}_frames.html", title="Anomalies")
+        if args.png: export_png(p4, filename=f"{pickle_name}_frames.png")
         if args.show: show(p4)
 
     #TODO: create html file
