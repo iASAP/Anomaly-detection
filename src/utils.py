@@ -48,37 +48,35 @@ def anomaly_score(psnr, max_psnr, min_psnr):
 def anomaly_score_inv(psnr, max_psnr, min_psnr):
     return (1.0 - ((psnr - min_psnr) / (max_psnr-min_psnr)))
 
-def anomaly_score_list(psnr_list):
-    anomaly_score_list = list()
-    for i in range(len(psnr_list)):
-        anomaly_score_list.append(anomaly_score(psnr_list[i], np.max(psnr_list), np.min(psnr_list)))
-        
-    return anomaly_score_list
+def anomaly_score_array(psnr):
+    return anomaly_score(psnr, np.max(psnr), np.min(psnr))
 
-def anomaly_score_list_inv(psnr_list):
-    anomaly_score_list = list()
-    for i in range(len(psnr_list)):
-        anomaly_score_list.append(anomaly_score_inv(psnr_list[i], np.max(psnr_list), np.min(psnr_list)))
-        
-    return anomaly_score_list
+def anomaly_score_array_inv(psnr):
+    return anomaly_score_inv(psnr, np.max(psnr), np.min(psnr))
 
 def AUC(anomal_scores, labels):
-    frame_auc = roc_auc_score(y_true=np.squeeze(labels, axis=0), y_score=np.squeeze(anomal_scores))
-    return frame_auc
+    return roc_auc_score(y_true=np.squeeze(labels, axis=0), y_score=np.squeeze(anomal_scores))
 
-def score_sum(list1, list2, alpha):
-    list_result = []
-    for i in range(len(list1)):
-        list_result.append((alpha*list1[i]+(1-alpha)*list2[i]))
-        
-    return list_result
+def score_sum(arr1, arr2, alpha):
+    return alpha*arr1 + (1-alpha)*arr2
 
-def sliding_window(image, stepSize, windowSize):
+def is_power_of_2(n):
+    return (n & (n-1) == 0) and n != 0
+
+def nearest_power_of_2(target):
+    if target > 1:
+        for i in range(1, int(target)):
+            if (2 ** i >= target):
+                return 2 ** i
+    else:
+        return 1
+
+def sliding_window(image, step_size, win_size):
     """
 
     """
     # slide a window across the image
-    for y in range(0, image.shape[0], stepSize):
-        for x in range(0, image.shape[1], stepSize):
+    for y in range(0, image.shape[0]-win_size[1], step_size[1]):
+        for x in range(0, image.shape[1]-win_size[0], step_size[0]):
             # yield the current window
-            yield (x, y, image[y:y + windowSize[1], x:x + windowSize[0]])
+            yield (x, y, image[y:y + win_size[1], x:x + win_size[0]])

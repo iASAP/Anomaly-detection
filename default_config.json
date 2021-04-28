@@ -1,0 +1,30 @@
+{
+  "image":{
+    "size_x":256,
+    "size_y":256,
+    "color": false
+  },
+  "window":{
+    "size_x":16,
+    "size_y":16,
+    "step_x":4,
+    "step_y":4
+  },
+
+  "gpus":"0",
+  "batch_size":4,
+  "test_batch_size":1,
+  "t_length" : 5,
+  "fdim":512,
+  "mdim":512,
+  "msize":10,
+  "alpha":0.6,
+  "num_workers": 0,
+  "num_workers_test": 1,
+  "dataset_type":"ped2",
+  "dataset_path":"/data/ucsd/dataset/",
+  "exp_dir":"log",
+  "loss_compact":0.1,
+  "loss_separate":0.1,
+  "lr":2e-4
+}
