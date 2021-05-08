@@ -53,7 +53,7 @@ if __name__ == "__main__":
     img_size = (config["image"]["size_x"], config["image"]["size_y"]) 
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
-    train_dataset = ChipDataLoader(train_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
+    train_dataset = ChipDataLoader(train_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
 
     train_size = len(train_dataset)
 

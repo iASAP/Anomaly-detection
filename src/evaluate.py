@@ -58,7 +58,7 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
-    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
+    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
     test_size = len(test_dataset)
 
 

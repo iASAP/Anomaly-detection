@@ -5,10 +5,10 @@
     "color": false
   },
   "window":{
-    "size_x":16,
-    "size_y":16,
-    "step_x":4,
-    "step_y":4
+    "size_x":256,
+    "size_y":256,
+    "step_x":256,
+    "step_y":256
   },
 
   "gpus":"0",
@@ -23,6 +23,7 @@
   "num_workers_test": 1,
   "dataset_type":"ped2",
   "dataset_path":"/data/ucsd/dataset/",
+  "extension":".tif",
   "exp_dir":"log",
   "loss_compact":0.1,
   "loss_separate":0.1,

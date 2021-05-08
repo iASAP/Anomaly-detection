@@ -26,7 +26,7 @@ def plot_results(normality_scores, labels, config, output_dir="."):
     w = config['image']['size_x'] // config['window']['size_x']
     h = config['image']['size_y'] // config['window']['size_y']
 
-    cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
+    cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
 
     # do max across chip dimension. this sets the anomaly score for each 
     # frame as the max score from all of the chips of that frame
@@ -145,7 +145,7 @@ def plot_frames(normality_scores, labels, config, frame_start=1600, frame_stop=1
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
-    dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'])
+    dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
     cpf = dataset.chips_per_frame()
     win_w, win_h = win_size
 

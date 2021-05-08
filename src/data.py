@@ -25,7 +25,7 @@ def np_load_frame(filename, resize_height, resize_width, color=True):
 
 
 class DataLoader(data.Dataset):
-    def __init__(self, video_folder, transform, resize_height, resize_width, time_step=4, num_pred=1, color=True):
+    def __init__(self, video_folder, transform, resize_height, resize_width, time_step=4, num_pred=1, color=True, ext=".jpg"):
         self.dir = video_folder
         self.transform = transform
         self.videos = OrderedDict()
@@ -36,6 +36,7 @@ class DataLoader(data.Dataset):
         self.setup()
         self.frames = self.get_all_samples()
         self.color = color
+        self.ext = ext
 
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, '*'))
@@ -43,7 +44,7 @@ class DataLoader(data.Dataset):
             video_name = video.split('/')[-1]
             self.videos[video_name] = {}
             self.videos[video_name]['path'] = video
-            self.videos[video_name]['frame'] = glob.glob(os.path.join(video, '*.tif'))
+            self.videos[video_name]['frame'] = glob.glob(os.path.join(video, "*"+self.ext))
             self.videos[video_name]['frame'].sort()
             self.videos[video_name]['length'] = len(self.videos[video_name]['frame'])
 
@@ -74,13 +75,14 @@ class DataLoader(data.Dataset):
 
 
 class ChipDataLoader(data.Dataset):
-    def __init__(self, video_folder, transform, img_size, win_size, step_size, time_step=4, num_pred=1, color=True):
+    def __init__(self, video_folder, transform, img_size, win_size, step_size, time_step=4, num_pred=1, color=True, ext=".jpg"):
         self.dir = video_folder
         self.transform = transform
         self.videos = OrderedDict()
         self._time_step = time_step
         self._num_pred = num_pred
         self.color = color
+        self.ext = ext
 
         # set as an (x,y) tuple. Assume x==y if only an integer is provided
         self.img_size = (img_size, img_size) if type(img_size)==int else img_size
@@ -132,7 +134,7 @@ class ChipDataLoader(data.Dataset):
             video_name = video.split('/')[-1]
             self.videos[video_name] = {}
             self.videos[video_name]['path'] = video
-            self.videos[video_name]['frames'] = sorted(glob.glob(os.path.join(video, '*.tif')))
+            self.videos[video_name]['frames'] = sorted(glob.glob(os.path.join(video, "*"+self.ext)))
             self.videos[video_name]['length'] = len(self.videos[video_name]['frames'])
 
     def get_start_frames(self):
