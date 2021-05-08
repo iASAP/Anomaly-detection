@@ -51,14 +51,14 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
 
     #model_dir = os.path.join(model_directory, config['dataset_type'], "log")
     model_dir = config['model_dir']
-    test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    #test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
 
     # Loading dataset
     img_size = (config["image"]["size_x"], config["image"]["size_y"])
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
-    test_dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
+    test_dataset = ChipDataLoader(config['dataset_path'], transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
     test_size = len(test_dataset)
 
 

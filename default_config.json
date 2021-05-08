@@ -22,7 +22,7 @@
   "num_workers": 0,
   "num_workers_test": 1,
   "dataset_type":"ped2",
-  "dataset_path":"/data/ucsd/dataset/",
+  "dataset_path":"/data/ucsd/dataset/ped2/training/frames",
   "extension":".tif",
   "exp_dir":"log",
   "loss_compact":0.1,

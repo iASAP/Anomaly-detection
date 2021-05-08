@@ -44,8 +44,6 @@ if __name__ == "__main__":
 
     print('Creating dataloaders...')
 
-    train_dir = os.path.join(config['dataset_path'], config['dataset_type'], "training", "frames/")
-
     # Loading dataset
     # train_dataset = DataLoader(train_dir, transforms.Compose([
     #              transforms.ToTensor(),          
@@ -53,7 +51,7 @@ if __name__ == "__main__":
     img_size = (config["image"]["size_x"], config["image"]["size_y"]) 
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
-    train_dataset = ChipDataLoader(train_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
+    train_dataset = ChipDataLoader(config['dataset_path'], transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
 
     train_size = len(train_dataset)
 
