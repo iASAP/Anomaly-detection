@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import sys
+import sys 
 import json
 import torch
 import torch.nn as nn
@@ -38,7 +38,7 @@ from bokeh.layouts import gridplot, layout
 
 import argparse
 
-def evaluate_model(config, truth_dir="./../../data", th=0.01):
+def evaluate_model(config, anomaly_context="all",  th=0.01):
     torch.manual_seed(2020)
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = config['gpus']
@@ -58,11 +58,12 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
-    test_dataset = ChipDataLoader(config['dataset_path'], transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
+    test_dataset = ChipDataLoader(config['dataset_path'], transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
     test_size = len(test_dataset)
 
-
-    test_batch = data.DataLoader(test_dataset, batch_size=config['batch_size'], 
+    # NOTE: currently, I think batch_size must be 1 for evaluation
+    #test_batch = data.DataLoader(test_dataset, batch_size=config['batch_size'], 
+    test_batch = data.DataLoader(test_dataset, batch_size=1, 
                                  shuffle=False, num_workers=config['num_workers_test'], drop_last=False)
 
     loss_func_mse = nn.MSELoss(reduction='none')
@@ -72,12 +73,8 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     model.cuda()
     m_items = torch.load(os.path.join(model_dir, "keys.pt"))
 
-    labels = np.load(os.path.join(truth_dir, 'frame_labels_'+config['dataset_type']+'.npy'))
-    if config['dataset_type'] == 'shanghai':
-        labels = np.expand_dims(labels, 0)
-
     videos = OrderedDict()
-    videos_list = sorted(glob.glob(os.path.join(test_dir, '*')))
+    videos_list = sorted(glob.glob(os.path.join(config['dataset_path'], '*')))
     for video in videos_list:
         video_name = video.split('/')[-1]
         videos[video_name] = {}
@@ -86,15 +83,14 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
         videos[video_name]['frame'].sort()
         videos[video_name]['length'] = len(videos[video_name]['frame'])
 
-    labels_list = []
     video_length = 0
     psnr_list = {}
     feature_distance_list = {}
 
     print('----------------- INFO --------------------')
-    print(f'test dataset:  {test_dir}')
+    print(f'test dataset:  {config["dataset_path"]}')
     print(f'model:         {model_dir}')
-    print(f'anomaly_context:   {config["anomaly_context"]}')
+    print(f'anomaly_context:   {anomaly_context}')
     print(f'ChipDataLoader:  ')
     print(f'    img_size:    {test_dataset.img_size}')
     print(f'    chip_size:   {test_dataset.win_size}')
@@ -105,7 +101,6 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     # Setting for video anomaly detection
     for video in videos_list:
         video_name = video.split('/')[-1]
-        labels_list = np.append(labels_list, labels[0][config['t_length']-1+video_length:videos[video_name]['length']+video_length])
         video_length += videos[video_name]['length']
         psnr_list[video_name] = []
         feature_distance_list[video_name] = []
@@ -132,8 +127,6 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
     feature_distance_list = np.zeros(chips_by_frames)
 
     for imgs in tqdm(test_batch):
-
-
         #print(f'input = {imgs.shape}')
         imgs = Variable(imgs).cuda()
 
@@ -172,7 +165,7 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
             feature_distance_list[chip, frame] = mse_feas
             k += 1
 
-    if config['anomaly_context']=="chips_video":
+    if anomaly_context=="chips_video":
         normality_score_total_list = [np.empty((1,0)) for i in range(0, chips_per_frame)]
         for c in range(0, chips_per_frame):
             start = 0
@@ -184,32 +177,27 @@ def evaluate_model(config, truth_dir="./../../data", th=0.01):
                 normality_score_total_list[c] = np.append(normality_score_total_list[c], score_sum(anomaly_score_array(psnr_list[c,start:stop]), anomaly_score_array_inv(feature_distance_list[c,start:stop]), config['alpha']))
                 start=stop
 
-    elif config['anomaly_context']=="all":
+    elif anomaly_context=="all":
         psnr_array = np.asarray(psnr_list).flatten()
         feature_distance_array = np.asarray(feature_distance_list).flatten()
         temp = score_sum(anomaly_score_array(psnr_array), anomaly_score_array_inv(feature_distance_array), config['alpha'])
         normality_score_total_list = temp.reshape((psnr_list.shape[0], psnr_list.shape[1]))
-
-    elif config['anomaly_context'] == "chips":
+    elif anomaly_context=="chips":
         normality_score_total_list = [score_sum(anomaly_score_array(psnr_list[c,:]), anomaly_score_array_inv(feature_distance_list[c,:]), config['alpha']) for c in range(chips_per_frame)]
-
     else:
-        print(f"Unrecognized anomaly_context method: {config['anomaly_context']}")
+        print(f"Unrecognized anomaly_context method: {anomaly_context}")
 
     # turn into numpy array and return everything
-    return np.asarray(normality_score_total_list), labels_list
-
-
-
+    return np.asarray(normality_score_total_list), videos
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="MNAD")
     parser.add_argument('--config', type=str, default='./eval_config.json', help='directory of log')
     parser.add_argument('--th', type=float, default=0.01, help='threshold for test updating')
-    parser.add_argument('--truth_dir', default="./../../data", type=str, help='directory of model')
-    parser.add_argument('--outfile', default="", type=str, help='directory of of results')
+    parser.add_argument('--truthfile', default=None, type=str, help='directory of truth')
+    parser.add_argument('--outfile', default="", type=str, help='directory of results pickle file')
+    parser.add_argument('--anomaly_context', default="all", type=str, help='options: \n1). all (default) \n2). chips \n3). chips_video')
     args = parser.parse_args()
 
     with open(args.config) as config_file:
@@ -217,7 +205,25 @@ if __name__ == "__main__":
         config = json.load(config_file)
     
     # pass test data through the model
-    anomaly_scores, labels = evaluate_model(config, args.truth_dir, args.th)
+    anomaly_scores, videos = evaluate_model(config, args.anomaly_context, args.th)
+
+    
+    if args.truthfile is not None and os.path.exists(args.truthfile): 
+        labels = np.load(args.truthfile)
+        if config['dataset_type'] == 'shanghai':
+            labels = np.expand_dims(labels, 0)
+
+        # Setting for video anomaly detection
+        labels_list=[]
+        video_length = 0
+        videos_list = sorted(glob.glob(os.path.join(config['dataset_path'], '*')))
+        for video in videos_list:
+            video_name = video.split('/')[-1]
+            labels_list = np.append(labels_list, labels[0][config['t_length']-1+video_length:videos[video_name]['length']+video_length])
+            video_length += videos[video_name]['length']
+
+    else:
+        labels = None
 
     # name the output file with the number of chips in each dimension if 
     # no name is given
@@ -226,10 +232,15 @@ if __name__ == "__main__":
     if (outfile == ""):
         w = config['image']['size_x'] // config['window']['size_x']
         h = config['image']['size_y'] // config['window']['size_y']
-        outfile = f"{w}x{h}_{config['anomaly_context']}.pickle"
+        outfile = f"{w}x{h}_{args.anomaly_context}.pickle"
+
+    # add the anomaly context parameter to the dictionary because it will be 
+    # saved in the evaluation results pickle file. Thus, when plotting the results,
+    # we will know what anomaly_context method was used to generate the results.
+    config['anomaly_context'] = args.anomaly_context
 
     with open(outfile, "wb") as fh:
         #pickle.dump((psnr, fs, labels, anomalies, config), fh)
-        pickle.dump((anomaly_scores, labels, config), fh)
+        pickle.dump((anomaly_scores, labels_list, config), fh)
     
 

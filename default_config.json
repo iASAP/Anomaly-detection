@@ -12,8 +12,7 @@
   },
 
   "gpus":"0",
-  "batch_size":4,
-  "test_batch_size":1,
+  "batch_size":1,
   "t_length" : 5,
   "fdim":512,
   "mdim":512,
@@ -24,7 +23,7 @@
   "dataset_type":"ped2",
   "dataset_path":"/data/ucsd/dataset/ped2/training/frames",
   "extension":".tif",
-  "exp_dir":"log",
+  "model_dir":".",
   "loss_compact":0.1,
   "loss_separate":0.1,
   "lr":2e-4

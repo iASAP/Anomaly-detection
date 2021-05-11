@@ -21,3 +21,7 @@ if __name__ == "__main__":
     os.makedirs(p, exist_ok=True)
     shutil.copyfile("default_config.json", os.path.join('experiments', args.exp_dir, "train_config.json"))
     shutil.copyfile("default_config.json", os.path.join('experiments', args.exp_dir, "eval_config.json"))
+
+    print("\n---------------- COMPLETE ---------------")
+    print(f"Created new directory `experiments/{args.exp_dir}`.")
+

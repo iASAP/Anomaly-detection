@@ -8,17 +8,14 @@ import pickle
 from evaluate import *
 from itertools import accumulate
 
-
-
-def plot_results(normality_scores, labels, config, output_dir="."):
-    """ Plot results in Bokeh"""
-    # ceate the output directory
-    #date_time_str = str(datetime.datetime.today())
-    #output_dir = os.path.join(output_dir, date_time_str)
+def plot_results_without_truth(normality_scores, config, output_dir="."):
+    # Plot Anomaly/Normality score
+    # -----------------------------------
     os.makedirs(output_dir, exist_ok=True)
 
     # create the dataset
-    test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    #test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    test_dir = config['dataset_path']
     img_size = (config["image"]["size_x"], config["image"]["size_y"])
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
@@ -26,7 +23,68 @@ def plot_results(normality_scores, labels, config, output_dir="."):
     w = config['image']['size_x'] // config['window']['size_x']
     h = config['image']['size_y'] // config['window']['size_y']
 
-    cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
+    cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
+
+    anomaly_score_max = np.max(1-normality_scores, axis=0)
+
+    # get the video boundary indices to potentially plot on Anomaly/Normality plot
+    video_names = list(cdl.videos.keys())
+    video_start_x = list(accumulate([v['length']-(config['t_length']-1) for k,v in cdl.videos.items()]))
+
+    # now add 0 to beginning and forget the last index. We want the starting point of each video, not the ending point
+    video_start_x = [0] + video_start_x[0:-1]
+
+    fig = figure(title="Anomaly", x_axis_label="Time", y_axis_label="Normality Score", tools=[])
+    fig.title.text_font_size="20px"
+
+    # plot the anomaly score for each frame (determined by the max of frames chips)
+    data = {
+          "max_scores" : anomaly_score_max,
+          "frames" : ['/'.join(i.split("/")[-2::]) for i in cdl.seq_stops],
+          "x" : np.arange(0, len(anomaly_score_max)),
+          "y" : anomaly_score_max,
+          #"legend_label" : "max_anomaly_score",
+          }
+
+    #anomaly_score_plot = p3.line(np.arange(0, change_points[-1]), anomaly_score_max, legend_label="max anomaly score")
+    #anomaly_line_glyph = bkm.Line(, legend_label="max anomaly score")
+    anomaly_line_r = fig.add_glyph(bkm.ColumnDataSource(data), bkm.Line(line_color='#3288bd'))
+
+    # plot the threshold
+    #threshold_plot = fig.segment(x0=0, y0=best_threshold, x1=len(labels), y1=best_threshold, line_color="red", legend_label="Best Threshold")
+
+    # plot the video transitions
+    y_0 = np.zeros(len(video_start_x))
+    y_1 = np.ones(len(video_start_x))
+    fig.segment(x0=video_start_x, y0=y_0, x1=video_start_x, y1=y_1, line_color='orange', legend_label="transition lines")
+    fig.text(x=video_start_x, y=y_1, text=video_names, legend_label="transition labels")
+
+
+    hover_tool = bkm.HoverTool(renderers=[anomaly_line_r], tooltips=[("index","$index"),("frame","@frames"),("max score", "@max_scores")])
+    fig.add_tools(hover_tool, bkm.BoxZoomTool(), bkm.ResetTool())
+    fig.legend.click_policy="hide"
+    return fig
+
+
+
+def plot_results_with_truth(normality_scores, labels, config, output_dir="."):
+    """ Plot results in Bokeh"""
+    # ceate the output directory
+    #date_time_str = str(datetime.datetime.today())
+    #output_dir = os.path.join(output_dir, date_time_str)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # create the dataset
+    #test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    test_dir = config['dataset_path']
+    img_size = (config["image"]["size_x"], config["image"]["size_y"])
+    win_size = (config["window"]["size_x"], config["window"]["size_y"])
+    win_step = (config["window"]["step_x"], config["window"]["step_y"])
+
+    w = config['image']['size_x'] // config['window']['size_x']
+    h = config['image']['size_y'] // config['window']['size_y']
+
+    cdl = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
 
     # do max across chip dimension. this sets the anomaly score for each 
     # frame as the max score from all of the chips of that frame
@@ -135,17 +193,18 @@ def plot_results(normality_scores, labels, config, output_dir="."):
     return p1, p2, p3, info
 
 
-def plot_frames(normality_scores, labels, config, frame_start=1600, frame_stop=1630):
+def plot_frames(normality_scores, labels, config, frame_start, frame_stop):
     """  """
     #ai = np.asarray(ai)
 
     # create the dataset
-    test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    #test_dir = os.path.join(config['dataset_path'], config['dataset_type'], "testing", "frames")
+    test_dir = config['dataset_path']
     img_size = (config["image"]["size_x"], config["image"]["size_y"])
     win_size = (config["window"]["size_x"], config["window"]["size_y"])
     win_step = (config["window"]["step_x"], config["window"]["step_y"])
 
-    dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], config['extension'])
+    dataset = ChipDataLoader(test_dir, transforms.Compose([transforms.ToTensor(),]), img_size, win_size, win_step, time_step=config['t_length']-1, color=config['image']['color'], ext=config['extension'])
     cpf = dataset.chips_per_frame()
     win_w, win_h = win_size
 
@@ -192,7 +251,7 @@ def plot_frames(normality_scores, labels, config, frame_start=1600, frame_stop=1
 
         new_path,frame = dataset.get_frame(frame_index*cpf)
         temp = new_path.split('/')[-2::]
-        p = figure(title=f"{os.path.join(temp[0], temp[1])} - {labels[frame_index]}", plot_width=300, plot_height=300,  tools=[])
+        p = figure(title=f"{os.path.join(temp[0], temp[1])} - {labels[frame_index]if labels is not None else ''}", plot_width=300, plot_height=300,  tools=[])
         p.xgrid.visible = False
         p.ygrid.visible = False
         p.image(image=[np.flipud(frame)], dw=256, dh=256, x=0, y=0)
@@ -290,8 +349,11 @@ if __name__ == "__main__":
         h = config['image']['size_y'] // config['window']['size_y']
 
         # plot results
-        p1, p2, p3, info = plot_results(normality_scores, labels, config)
-        l1 = layout([[p1, p2], [info, p3],], sizing_mode='stretch_both')
+        if labels is None:
+            l1 = plot_results_without_truth(normality_scores, config)
+        else:
+            p1, p2, p3, info = plot_results_with_truth(normality_scores, labels, config)
+            l1 = layout([[p1, p2], [info, p3],], sizing_mode='stretch_both')
 
         pickle_name = f.split(".")[0]
         #curdoc().theme = 'dark_minimal'
