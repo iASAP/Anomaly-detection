@@ -25,6 +25,10 @@ Optional command line arguments for training (defaults shown):
 * --epochs=60
 
 ## Evaluating
+Evaluation results are saved in a `*.pickle` file including the config settings
+used for evaluation. This pickle file will be automatically named or you can specify 
+a name with the `--outfile` parameter (see below).
+
 Optional command line arguments for evaluating (defaults shown):
 
 * --config=./eval_config.json
@@ -51,6 +55,13 @@ Optional command line arguments for evaluating (defaults shown):
 
 
 ## Plotting
+Create plots of the evaluation results stored in a `*.pickle` file and save these
+plots as `*.html` files. 
+
+If being run locally, the `--show` parameter should cause the resultant plots to
+be automatically shown in the users default browser. Otherwise, the html files can
+always be opened manually in a browser.
+
 Command line arguments for plotting the results stored in `*.pickle` files (defaults shown):
 
 * --infile=""
@@ -62,3 +73,7 @@ Command line arguments for plotting the results stored in `*.pickle` files (defa
 * --frame_range=(45,70)
   The index range of frames to plot with overlayed anomaly_scores. A large number will
   create potentially problematically large html files
+
+  --show
+  A flag which will attempt to automatically show the plots in the users default
+  browser. **NOTE: Does not work if being run remotely**
